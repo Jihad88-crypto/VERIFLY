@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Upload Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 50px;
+            background: #1a1a2e;
+            color: white;
+        }
+
+        .upload-box {
+            border: 2px dashed #14F195;
+            padding: 50px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 10px;
+        }
+
+        .upload-box:hover {
+            background: rgba(20, 241, 149, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Simple Upload Test</h1>
+    <div class="upload-box" id="uploadBox">
+        Click here to upload
+    </div>
+    <input type="file" id="fileInput" style="display: none;">
+    <div id="result" style="margin-top: 20px;"></div>
+
+    <script>
+        console.log('JavaScript loaded successfully!');
+
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const result = document.getElementById('result');
+
+        uploadBox.onclick = function () {
+            console.log('Upload box clicked');
+            fileInput.click();
+        };
+
+        fileInput.onchange = function () {
+            console.log('File selected:', this.files[0]);
+            if (this.files[0]) {
+                result.innerHTML = '<p style="color: #14F195;">✓ File selected: ' + this.files[0].name + '</p>';
+            }
+        };
+
+        console.log('All handlers attached');
+    </script>
+</body>
+
+</html>

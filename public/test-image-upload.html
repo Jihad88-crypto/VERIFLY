@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Image Upload Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 50px;
+            background: #0a0a0f;
+            color: white;
+        }
+
+        .upload-box {
+            border: 2px dashed #14F195;
+            padding: 100px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .upload-box:hover {
+            background: rgba(20, 241, 149, 0.1);
+        }
+
+        #result {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🔍 Image Upload Diagnostic Test</h1>
+    <p>Test apakah JavaScript upload berfungsi tanpa Laravel</p>
+
+    <div class="upload-box" id="uploadBox" onclick="triggerUpload()">
+        <h2>KLIK DI SINI UNTUK UPLOAD</h2>
+        <p>Atau drag & drop foto ke sini</p>
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFile(this.files)">
+
+    <div id="result"></div>
+
+    <script>
+        console.log('✅ JavaScript loaded!');
+
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const result = document.getElementById('result');
+
+        console.log('✅ Elements found:', { uploadBox, fileInput, result });
+
+        function triggerUpload() {
+            console.log('✅ triggerUpload called');
+            fileInput.click();
+        }
+
+        function handleFile(files) {
+            console.log('✅ handleFile called with files:', files);
+            if (files && files.length > 0) {
+                const file = files[0];
+                result.innerHTML = `
+                    <h3 style="color: #14F195;">✓ FILE BERHASIL DIPILIH!</h3>
+                    <p><strong>Nama:</strong> ${file.name}</p>
+                    <p><strong>Ukuran:</strong> ${(file.size / 1024).toFixed(2)} KB</p>
+                    <p><strong>Type:</strong> ${file.type}</p>
+                    <p style="color: #10b981; margin-top: 20px;">
+                        ✅ Upload berfungsi dengan baik!<br>
+                        Masalahnya ada di verify-image.blade.php
+                    </p>
+                `;
+            }
+        }
+
+        // Drag & Drop
+        uploadBox.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            uploadBox.style.borderColor = '#14F195';
+            uploadBox.style.background = 'rgba(20, 241, 149, 0.2)';
+            console.log('✅ Dragover detected');
+        });
+
+        uploadBox.addEventListener('dragleave', function () {
+            uploadBox.style.borderColor = '#14F195';
+            uploadBox.style.background = 'rgba(255,255,255,0.05)';
+        });
+
+        uploadBox.addEventListener('drop', function (e) {
+            e.preventDefault();
+            uploadBox.style.background = 'rgba(255,255,255,0.05)';
+            console.log('✅ Drop detected:', e.dataTransfer.files);
+            handleFile(e.dataTransfer.files);
+        });
+
+        console.log('✅ All handlers attached successfully!');
+    </script>
+</body>
+
+</html>
