@@ -612,7 +612,8 @@
                             generator: result.generator,
                             method: result.method,
                             usedGoogleVision: result.usedGoogleVision,
-                            scores: result.scores || {}
+                            scores: result.scores || {},
+                            metadata: result.metadata || {}  // ✅ ADD METADATA!
                         };
                     } else {
                         // Error response from backend
@@ -667,51 +668,87 @@
             const verdictTitle = document.getElementById('verdictTitle');
             const verdictScore = document.getElementById('verdictScore');
             
-            // Clear previous classes
+            // Clear previous classes AND inline styles
             verdictHeader.classList.remove('safe');
+            verdictHeader.style.background = ''; // Clear inline background
             
-            if(confidence >= 80) {
-                // 80-100%: AUTHENTIC (Green)
+            if(confidence >= 70) {
+                // 70-100%: AUTHENTIC (Green) - LOWERED from 80%
                 verdictHeader.classList.add('safe');
                 verdictIcon.textContent = '✅';
                 verdictTitle.textContent = 'AUTHENTIC IMAGE';
-            } else if(confidence >= 65) {
-                // 65-79%: LIKELY REAL (Light Orange) - Lowered from 60%
+            } else if(confidence >= 55) {
+                // 55-69%: LIKELY REAL (Light Orange)
                 verdictHeader.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
                 verdictIcon.textContent = '⚠️';
                 verdictTitle.textContent = 'LIKELY REAL';
-            } else if(confidence >= 40) {
-                // 40-64%: SUSPICIOUS (Red/Orange) - Expanded from 40-59%
+            } else if(confidence >= 45) {
+                // 45-64%: SUSPICIOUS (Red/Orange) - Reduced from 40-64%
                 verdictHeader.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
                 verdictIcon.textContent = '⚠️';
                 verdictTitle.textContent = 'SUSPICIOUS';
             } else {
-                // 0-39%: AI GENERATED (Dark Red)
+                // 0-44%: AI GENERATED (Dark Red)
                 verdictHeader.style.background = 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)';
                 verdictIcon.textContent = '❌';
                 verdictTitle.textContent = 'AI GENERATED';
             }
             verdictScore.textContent = `Confidence: ${Math.round(confidence)}%`;
             
+            // Helper function to format datetime
+            const formatDateTime = (datetime) => {
+                if (!datetime) return 'Not Available';
+                try {
+                    const date = new Date(datetime.replace(/:/g, '-').replace(' ', 'T'));
+                    return date.toLocaleString('en-US', { 
+                        year: 'numeric', month: 'long', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                    });
+                } catch (e) {
+                    return datetime;
+                }
+            };
+            
+            // DEBUG: Log what we received
+            console.log('🔍 FULL RESULT OBJECT:', result);
+            console.log('📦 METADATA FIELD:', result.metadata);
+            console.log('🏷️ Make:', result.metadata?.make);
+            console.log('🏷️ Model:', result.metadata?.model);
+            
+            // Calculate individual scores - EXTRACT FROM BACKEND RESPONSE
+            const metadataScore = result.scores?.metadata || 50;  // Metadata-only score
+            const pixelScore = result.scores?.pixel || 50;        // Pixel-only score
+            const finalScore = result.confidence;                 // Final combined score
+            
+            // DEBUG: Log scores to verify accuracy
+            console.log('📊 SCORES FROM BACKEND:', {
+                metadata: metadataScore,
+                pixel: pixelScore,
+                final: finalScore,
+                raw_scores: result.scores
+            });
+            
             // Update accordion content with backend analysis details
             document.getElementById('metadataContent').innerHTML = `
-                <p><strong>Analysis Method:</strong> ${result.method || 'Internal Analysis'}</p>
-                <p><strong>Generator Detected:</strong> ${result.generator || 'None'}</p>
-                <p><strong>Google Vision:</strong> ${result.usedGoogleVision ? 'Used' : 'Not Used'}</p>
-                ${result.scores ? `
-                    <p><strong>Internal Score:</strong> ${result.scores.internal || 'N/A'}%</p>
-                    ${result.scores.googleVision ? `<p><strong>Google Vision Score:</strong> ${result.scores.googleVision}%</p>` : ''}
-                ` : ''}
-                <div class="score-bar">
-                    <div class="score-fill" style="width: ${confidence}%"></div>
+                <p style="font-weight: 600; color: #1f2937; margin-bottom: 10px;">📸 Camera Information</p>
+                <p><strong>Camera Brand:</strong> ${result.metadata?.make || 'Not Available'}</p>
+                <p><strong>Camera Model:</strong> ${result.metadata?.model || 'Not Available'}</p>
+                <p><strong>Photo Taken:</strong> ${formatDateTime(result.metadata?.datetime)}</p>
+                <p><strong>Resolution:</strong> ${result.metadata?.width && result.metadata?.height ? `${result.metadata.width} x ${result.metadata.height} pixels` : 'Not Available'}</p>
+                <hr style="margin: 15px 0; border: none; border-top: 1px solid #e5e7eb;">
+                <div style="margin-top: 15px;">
+                    <p style="margin-bottom: 8px;"><strong>Metadata Score:</strong></p>
+                    <div style="background: #e5e7eb; border-radius: 8px; height: 24px; overflow: hidden; margin-bottom: 5px;">
+                        <div style="background: linear-gradient(90deg, #10b981, #14f195); height: 100%; width: ${metadataScore}%; transition: width 0.5s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-weight: 600; font-size: 12px;">${Math.round(metadataScore)}%</div>
+                    </div>
+                    <p style="font-size: 12px; color: #6b7280; margin-top: 4px;">Based on EXIF data and camera detection</p>
                 </div>
-                <p><strong>Final Confidence:</strong> ${Math.round(confidence)}%</p>
             `;
             
             document.getElementById('pixelContent').innerHTML = `
                 <p><strong>Analysis:</strong> Comprehensive pixel-level detection</p>
                 <p><strong>Checks Performed:</strong></p>
-                <ul style="margin-left: 20px; line-height: 1.8;">
+                <ul style="margin-left: 20px; line-height: 1.8; font-size: 14px;">
                     <li>Edge sharpness analysis</li>
                     <li>Color uniqueness detection</li>
                     <li>Texture variance analysis</li>
@@ -719,27 +756,38 @@
                     <li>Scene perfection analysis</li>
                     <li>Skin texture smoothness (for portraits)</li>
                 </ul>
-                <div class="score-bar">
-                    <div class="score-fill" style="width: ${confidence}%"></div>
+                <hr style="margin: 15px 0; border: none; border-top: 1px solid #e5e7eb;">
+                <div style="margin-top: 15px;">
+                    <p style="margin-bottom: 8px;"><strong>Pixel Analysis Score:</strong></p>
+                    <div style="background: #e5e7eb; border-radius: 8px; height: 24px; overflow: hidden; margin-bottom: 5px;">
+                        <div style="background: linear-gradient(90deg, #3b82f6, #60a5fa); height: 100%; width: ${pixelScore}%; transition: width 0.5s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-weight: 600; font-size: 12px;">${Math.round(pixelScore)}%</div>
+                    </div>
+                    <p style="font-size: 12px; color: #6b7280; margin-top: 4px;">Based on visual pattern analysis</p>
                 </div>
-                <p><strong>Score:</strong> ${Math.round(confidence)}%</p>
             `;
             
             
             document.getElementById('aiContent').innerHTML = `
                 <p><strong>Detection:</strong> ${result.isAI ? 'AI-generated signatures found' : 'No strong AI signatures detected'}</p>
-                <p><strong>Confidence:</strong> ${Math.round(confidence)}%</p>
                 <p><strong>Status:</strong> ${
-                    confidence >= 80 ? 'Authentic - Very likely real' :
-                    confidence >= 60 ? 'Likely Real - Probably authentic' :
-                    confidence >= 40 ? 'Suspicious - Possible AI generation' :
-                    'AI Generated - Strong AI indicators'
+                    finalScore >= 80 ? 'Authentic - Very likely real' :
+                    finalScore >= 65 ? 'Likely Real - Probably authentic' :
+                    finalScore >= 55 ? 'Likely Real - Probably authentic' :
+                    finalScore >= 45 ? 'Suspicious - Possible AI generation' :
+                    'AI Generated - High probability'
                 }</p>
-                ${result.error ? `<p style="color: #f59e0b;"><strong>⚠️ Note:</strong> ${result.error}</p>` : ''}
-                <div class="score-bar">
-                    <div class="score-fill" style="width: ${confidence}%"></div>
+                <hr style="margin: 15px 0; border: none; border-top: 1px solid #e5e7eb;">
+                <div style="margin-top: 15px;">
+                    <p style="margin-bottom: 8px;"><strong>Final Combined Score:</strong></p>
+                    <div style="background: #e5e7eb; border-radius: 8px; height: 28px; overflow: hidden; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="background: ${
+                            finalScore >= 65 ? 'linear-gradient(90deg, #10b981, #14f195)' :
+                            finalScore >= 45 ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' :
+                            'linear-gradient(90deg, #ef4444, #f87171)'
+                        }; height: 100%; width: ${finalScore}%; transition: width 0.5s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; color: white; font-weight: 700; font-size: 14px;">${Math.round(finalScore)}%</div>
+                    </div>
+                    <p style="font-size: 12px; color: #6b7280; margin-top: 4px;">Weighted combination: Metadata (70%) + Pixel (30%)</p>
                 </div>
-                <p><strong>Final Score:</strong> ${Math.round(confidence)}%</p>
             `;
             
             // Animate score bars

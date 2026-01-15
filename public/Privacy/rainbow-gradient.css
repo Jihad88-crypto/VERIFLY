@@ -1,0 +1,38 @@
+/* ============================================ */
+/* HD IMAGE BACKGROUND - RIGHT PANEL */
+/* ============================================ */
+
+.visual-section {
+  background-image: url('/Privacy/space-bg-hd.png') !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  position: relative !important;
+  animation: none !important;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Subtle dark overlay for text contrast */
+.visual-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg,
+      rgba(0, 0, 0, 0.15) 0%,
+      rgba(0, 0, 0, 0.05) 50%,
+      rgba(0, 0, 0, 0.1) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Hide blur elements */
+.gradient-blob,
+.glass-visual {
+  display: none !important;
+}
+
+/* Ensure AI button is above overlay */
+.ai-fab {
+  z-index: 100 !important;
+}

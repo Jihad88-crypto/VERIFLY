@@ -24,10 +24,13 @@ class ImageAnalysisController extends Controller
     public function detectAI(Request $request)
     {
         try {
-            Log::info('=== AI Detection Request Started (Hybrid with Clarifai) ===');
+            Log::info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            Log::info('🔍 NEW IMAGE ANALYSIS REQUEST - ' . now()->format('Y-m-d H:i:s'));
+            Log::info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             
             // Validate - accept any file
             if (!$request->hasFile('image')) {
+                Log::error('❌ NO FILE PROVIDED IN REQUEST');
                 return response()->json([
                     'success' => false,
                     'error' => 'No image file provided'
@@ -35,10 +38,11 @@ class ImageAnalysisController extends Controller
             }
             
             $image = $request->file('image');
-            Log::info('File received:', [
+            Log::info('📁 FILE RECEIVED:', [
                 'name' => $image->getClientOriginalName(),
-                'size' => $image->getSize(),
-                'mime' => $image->getMimeType()
+                'size' => number_format($image->getSize()) . ' bytes',
+                'mime' => $image->getMimeType(),
+                'extension' => $image->getClientOriginalExtension()
             ]);
             
             // Analyze file signatures for AI generators
@@ -93,15 +97,65 @@ class ImageAnalysisController extends Controller
                 $hasCamera = isset($exifData['Make']) || isset($exifData['Model']);
                 $hasDateTime = isset($exifData['DateTime']) || isset($exifData['DateTimeOriginal']);
                 
-                if (!$hasCamera && !$hasDateTime) {
-                    // No camera info = EXTREMELY suspicious for AI
-                    // ULTRA AGGRESSIVE: Lowered from 25 to 15
-                    $confidence = 15; // Very strong suspicion - almost certainly AI or heavily edited
-                    $isAI = false; // Not confirmed AI, but extremely suspicious
+                // Check for phone camera indicators
+                $isPhoneCamera = false;
+                if ($exifData) {
+                    // EXPANDED: Added more brands (30+ total)
+                    $phoneBrands = [
+                        'samsung', 'apple', 'iphone', 'xiaomi', 'oppo', 'vivo', 
+                        'huawei', 'oneplus', 'google', 'pixel', 'motorola', 'nokia',
+                        'lg', 'sony', 'asus', 'realme', 'poco', 'redmi',
+                        // NEW BRANDS:
+                        'infinix', 'tecno', 'lenovo', 'zte', 'honor', 'meizu',
+                        'coolpad', 'blackberry', 'htc', 'sharp', 'panasonic',
+                        'fujitsu', 'kyocera', 'mi', 'galaxy'
+                    ];
+                    
+                    $make = strtolower($exifData['Make'] ?? '');
+                    $model = strtolower($exifData['Model'] ?? '');
+                    
+                    // DEBUG LOGGING: Track actual Make/Model values
+                    Log::info('Metadata Make/Model:', [
+                        'make' => $make ?: 'EMPTY',
+                        'model' => $model ?: 'EMPTY',
+                        'hasCamera' => $hasCamera,
+                        'hasDateTime' => $hasDateTime
+                    ]);
+                    
+                    foreach ($phoneBrands as $brand) {
+                        if (stripos($make, $brand) !== false || stripos($model, $brand) !== false) {
+                            $isPhoneCamera = true;
+                            Log::info('Phone camera detected:', [
+                                'make' => $exifData['Make'] ?? 'unknown',
+                                'model' => $exifData['Model'] ?? 'unknown',
+                                'matched_brand' => $brand
+                            ]);
+                            break;
+                        }
+                    }
+                    
+                    // If not detected, log for debugging
+                    if (!$isPhoneCamera && ($hasCamera || $hasDateTime)) {
+                        Log::warning('Phone camera NOT detected despite having metadata:', [
+                            'make' => $exifData['Make'] ?? 'NOT SET',
+                            'model' => $exifData['Model'] ?? 'NOT SET'
+                        ]);
+                    }
+                }
+                
+                // Determine confidence based on metadata
+                if ($isPhoneCamera) {
+                    // Phone camera detected = high confidence it's real
+                    $confidence = 80; // High confidence for phone cameras
+                } else if ($hasCamera && ($hasDateTime || isset($exifData['Software']))) {
+                    // Has camera Make/Model + additional metadata = likely real camera
+                    // FIXED: Only give 75% if has actual camera info (not just DateTime)
+                    $confidence = 75; // Moderate-high confidence
+                    $isAI = false;
                 } else {
-                    // Has camera info = possibly real, but AI often fakes EXIF
-                    // ULTRA AGGRESSIVE: Lowered from 75 to 60
-                    $confidence = 60; // Low-moderate confidence - heavily rely on pixel analysis
+                    // No camera info OR only has DateTime = SUSPICIOUS
+                    // Common for downloaded/shared AI images
+                    $confidence = 52; // Neutral/slightly favor real
                     $isAI = false;
                 }
             }
@@ -112,6 +166,68 @@ class ImageAnalysisController extends Controller
                 'generator' => $detectedGenerator,
                 'hasExif' => !empty($exifData)
             ]);
+            
+            // ============================================
+            // SIGHTENGINE AI DETECTION (MOVED HERE TO ENSURE EXECUTION)
+            // ============================================
+            Log::info('🔍 CHECKING SIGHTENGINE INTEGRATION...');
+            
+            $sightengineScore = null;
+            $sightengineEnabled = env('SIGHTENGINE_ENABLED', false);
+            $sightengineUser = env('SIGHTENGINE_API_USER');
+            $sightengineSecret = env('SIGHTENGINE_API_SECRET');
+            
+            Log::info('Sightengine Config:', [
+                'enabled' => $sightengineEnabled,
+                'has_user' => !empty($sightengineUser),
+                'has_secret' => !empty($sightengineSecret),
+                'user_value' => $sightengineUser
+            ]);
+            
+            if ($sightengineEnabled) {
+                try {
+                    Log::info('✅ Sightengine ENABLED - Starting AI detection...');
+                    
+                    if ($sightengineUser && $sightengineSecret) {
+                        // Initialize Sightengine client
+                        $client = new \Sightengine\SightengineClient($sightengineUser, $sightengineSecret);
+                        
+                        // Check for AI-generated content and text (watermarks)
+                        $output = $client->check(['genai', 'text'])->set_file($filePath);
+                        
+                        Log::info('Sightengine API Response:', (array)$output);
+                        
+                        if (isset($output->status) && $output->status === 'success') {
+                            // AI-generated detection score (0-1, higher = more likely AI)
+                            $aiProbability = $output->type->ai_generated ?? 0;
+                            
+                            // Convert to our scale (0-100, lower = more likely AI)
+                            $sightengineScore = round((1 - $aiProbability) * 100);
+                            
+                            // Check for watermarks/text
+                            $hasWatermark = false;
+                            if (isset($output->text) && isset($output->text->has_text) && $output->text->has_text) {
+                                $hasWatermark = true;
+                                Log::info('Watermark/Text detected in image');
+                            }
+                            
+                            Log::info('Sightengine Analysis:', [
+                                'ai_probability' => $aiProbability,
+                                'sightengine_score' => $sightengineScore,
+                                'has_watermark' => $hasWatermark
+                            ]);
+                        }
+                    } else {
+                        Log::warning('Sightengine credentials missing!');
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Sightengine API failed:', [
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            } else {
+                Log::info('❌ Sightengine DISABLED in config');
+            }
             
             // PIXEL-LEVEL ANALYSIS: Analyze image characteristics
             $pixelAnalysisScore = 50; // Default neutral
@@ -180,74 +296,87 @@ class ImageAnalysisController extends Controller
                     $aiIndicators = 0;
                     $realIndicators = 0;
                     
-                    // Check edge sharpness (ULTRA AGGRESSIVE: extremely strict)
-                    if ($avgEdgeSharpness < 8) {
-                        $aiIndicators += 4; // Extremely strong AI indicator
+                    // AI indicators (signs of AI generation)
+                    if ($avgEdgeSharpness > 30) $aiIndicators++; // Too sharp
+                    if ($colorUniqueness < 0.12) $aiIndicators++; // STRICTER: Too uniform colors (was 0.15)
+                    if ($avgTextureVariance < 30) $aiIndicators++; // Too smooth texture
+                    
+                    // Real indicators (signs of real photo)
+                    if ($avgEdgeSharpness >= 15 && $avgEdgeSharpness <= 30) $realIndicators++; // Natural sharpness
+                    if ($colorUniqueness >= 0.12) $realIndicators++; // ADJUSTED: Natural color variety (was 0.15)
+                    if ($avgTextureVariance >= 40) $realIndicators++; // Natural texture variance
+                    
+                    // Check edge sharpness (BALANCED: less aggressive)
+                    if ($avgEdgeSharpness < 5) {
+                        $aiIndicators += 3; // Strong AI indicator (reduced from 4)
                         $pixelAnalysisDetails['edge_sharpness'] = 'extremely_smooth_ai';
-                    } else if ($avgEdgeSharpness < 12) {
-                        $aiIndicators += 3; // Very strong AI indicator
+                    } else if ($avgEdgeSharpness < 10) {
+                        $aiIndicators += 2; // Moderate AI indicator (reduced from 3)
                         $pixelAnalysisDetails['edge_sharpness'] = 'very_smooth_ai';
-                    } else if ($avgEdgeSharpness < 18) {
-                        $aiIndicators += 2; // Strong AI indicator
-                        $pixelAnalysisDetails['edge_sharpness'] = 'too_smooth';
-                    } else if ($avgEdgeSharpness < 23) {
-                        $aiIndicators++; // Moderate AI indicator
+                    } else if ($avgEdgeSharpness < 15) {
+                        $aiIndicators++; // Weak AI indicator (reduced from 2)
                         $pixelAnalysisDetails['edge_sharpness'] = 'somewhat_smooth';
-                    } else if ($avgEdgeSharpness > 40) {
+                    } else if ($avgEdgeSharpness > 35) {
                         $realIndicators += 4; // Extremely strong real indicator
                         $pixelAnalysisDetails['edge_sharpness'] = 'extremely_natural';
-                    } else if ($avgEdgeSharpness > 30) {
-                        $realIndicators += 3; // Very strong real indicator
+                    } else if ($avgEdgeSharpness > 28) {
+                        $realIndicators += 3; // Very strong real indicator (easier)
                         $pixelAnalysisDetails['edge_sharpness'] = 'very_natural';
-                    } else if ($avgEdgeSharpness > 25) {
-                        $realIndicators += 2; // Strong real indicator
+                    } else if ($avgEdgeSharpness > 22) {
+                        $realIndicators += 2; // Strong real indicator (easier)
                         $pixelAnalysisDetails['edge_sharpness'] = 'natural';
+                    } else if ($avgEdgeSharpness > 16) {
+                        $realIndicators++; // NEW: Reward moderate sharpness
+                        $pixelAnalysisDetails['edge_sharpness'] = 'moderate';
                     } else {
                         $pixelAnalysisDetails['edge_sharpness'] = 'neutral';
                     }
                     
-                    // Check color uniqueness (ULTRA AGGRESSIVE: extremely strict)
-                    if ($colorUniqueness < 0.15) {
-                        $aiIndicators += 4; // Extremely strong AI indicator
+                    // Check color uniqueness (BALANCED: less aggressive)
+                    if ($colorUniqueness < 0.12) {
+                        $aiIndicators += 3; // Strong AI indicator (reduced from 4)
                         $pixelAnalysisDetails['color_distribution'] = 'extremely_uniform_ai';
-                    } else if ($colorUniqueness < 0.25) {
-                        $aiIndicators += 3; // Very strong AI indicator
+                    } else if ($colorUniqueness < 0.20) {
+                        $aiIndicators += 2; // Moderate AI indicator (reduced from 3)
                         $pixelAnalysisDetails['color_distribution'] = 'very_uniform_ai';
-                    } else if ($colorUniqueness < 0.35) {
-                        $aiIndicators += 2; // Strong AI indicator
-                        $pixelAnalysisDetails['color_distribution'] = 'too_uniform';
-                    } else if ($colorUniqueness < 0.45) {
-                        $aiIndicators++; // Moderate AI indicator
+                    } else if ($colorUniqueness < 0.30) {
+                        $aiIndicators++; // Weak AI indicator (reduced from 2)
                         $pixelAnalysisDetails['color_distribution'] = 'somewhat_uniform';
-                    } else if ($colorUniqueness > 0.65) {
-                        $realIndicators += 4; // Extremely strong real indicator
+                    } else if ($colorUniqueness > 0.60) {
+                        $realIndicators += 4; // Extremely strong real indicator (easier)
                         $pixelAnalysisDetails['color_distribution'] = 'extremely_natural';
-                    } else if ($colorUniqueness > 0.55) {
-                        $realIndicators += 3; // Very strong real indicator
+                    } else if ($colorUniqueness > 0.50) {
+                        $realIndicators += 3; // Very strong real indicator (easier)
                         $pixelAnalysisDetails['color_distribution'] = 'very_natural';
-                    } else if ($colorUniqueness > 0.5) {
-                        $realIndicators += 2; // Strong real indicator
+                    } else if ($colorUniqueness > 0.42) {
+                        $realIndicators += 2; // Strong real indicator (easier)
                         $pixelAnalysisDetails['color_distribution'] = 'natural';
+                    } else if ($colorUniqueness > 0.35) {
+                        $realIndicators++; // NEW: Reward moderate variety
+                        $pixelAnalysisDetails['color_distribution'] = 'moderate';
                     } else {
                         $pixelAnalysisDetails['color_distribution'] = 'neutral';
                     }
                     
-                    // NEW: Check texture variance (ULTRA AGGRESSIVE)
-                    if ($avgTextureVariance < 3) {
-                        $aiIndicators += 3; // Very strong AI indicator - extremely uniform
+                    // Check texture variance (BALANCED: less aggressive)
+                    if ($avgTextureVariance < 2) {
+                        $aiIndicators += 3; // Strong AI indicator (reduced from 3)
                         $pixelAnalysisDetails['texture'] = 'extremely_uniform_ai';
-                    } else if ($avgTextureVariance < 7) {
-                        $aiIndicators += 2; // Strong AI indicator
+                    } else if ($avgTextureVariance < 5) {
+                        $aiIndicators += 2; // Moderate AI indicator (reduced from 2)
                         $pixelAnalysisDetails['texture'] = 'too_uniform_ai';
-                    } else if ($avgTextureVariance < 12) {
-                        $aiIndicators++; // Moderate AI indicator
+                    } else if ($avgTextureVariance < 10) {
+                        $aiIndicators++; // Weak AI indicator (reduced from 1)
                         $pixelAnalysisDetails['texture'] = 'somewhat_uniform';
-                    } else if ($avgTextureVariance > 25) {
-                        $realIndicators += 3; // Very strong real indicator
+                    } else if ($avgTextureVariance > 22) {
+                        $realIndicators += 3; // Very strong real indicator (easier)
                         $pixelAnalysisDetails['texture'] = 'very_natural';
-                    } else if ($avgTextureVariance > 18) {
-                        $realIndicators += 2; // Strong real indicator
+                    } else if ($avgTextureVariance > 16) {
+                        $realIndicators += 2; // Strong real indicator (easier)
                         $pixelAnalysisDetails['texture'] = 'natural';
+                    } else if ($avgTextureVariance > 11) {
+                        $realIndicators++; // NEW: Reward moderate texture
+                        $pixelAnalysisDetails['texture'] = 'moderate';
                     } else {
                         $pixelAnalysisDetails['texture'] = 'neutral';
                     }
@@ -297,9 +426,9 @@ class ImageAnalysisController extends Controller
                         $perfectCount++;
                     }
                     
-                    // If ALL 3 metrics are "perfect", this is suspicious
+                    // STRICTER: If too many metrics are "perfect", apply heavy penalty
                     if ($perfectCount >= 3) {
-                        $tooPerfectPenalty = 20; // Strong AI indicator
+                        $tooPerfectPenalty = 20; // INCREASED from 15 - AI images are suspiciously perfect
                         $pixelAnalysisDetails['too_perfect'] = 'all_metrics_moderate';
                     } else if ($perfectCount >= 2) {
                         $tooPerfectPenalty = 10; // Moderate AI indicator
@@ -325,62 +454,55 @@ class ImageAnalysisController extends Controller
                     
                     $pixelAnalysisDetails['scene_perfection_penalty'] = $scenePerfectionPenalty;
                     
-                    // SOLUTION 3: SKIN TEXTURE ANALYSIS
-                    // Sample center region (likely face area for portraits)
+                    // SOLUTION 3: SKIN TEXTURE ANALYSIS (for portraits)
+                    // AI tends to over-smooth skin
+                    $skinSmoothnessValue = 0;
+                    $skinPixelCount = 0;
                     $skinSmoothnessPenalty = 0;
-                    $centerX = floor($width / 2);
-                    $centerY = floor($height / 2);
-                    $faceRegionSize = min(100, floor($width / 4));
                     
-                    $skinSmoothness = 0;
-                    $skinSamples = 0;
-                    
-                    for ($i = 0; $i < 500; $i++) {
-                        $x = $centerX + rand(-$faceRegionSize, $faceRegionSize);
-                        $y = $centerY + rand(-$faceRegionSize, $faceRegionSize);
+                    // Detect skin tones and analyze smoothness
+                    for ($i = 0; $i < min(5000, $sampleSize); $i++) {
+                        $x = rand(1, $width - 2);
+                        $y = rand(1, $height - 2);
                         
-                        if ($x >= 1 && $x < $width - 1 && $y >= 1 && $y < $height - 1) {
-                            $rgb = imagecolorat($imageResource, $x, $y);
-                            $r = ($rgb >> 16) & 0xFF;
-                            $g = ($rgb >> 8) & 0xFF;
-                            $b = $rgb & 0xFF;
+                        $rgb = imagecolorat($imageResource, $x, $y);
+                        $r = ($rgb >> 16) & 0xFF;
+                        $g = ($rgb >> 8) & 0xFF;
+                        $b = $rgb & 0xFF;
+                        
+                        // Detect skin tones (simplified)
+                        if ($r > 95 && $g > 40 && $b > 20 && 
+                            $r > $g && $r > $b && 
+                            abs($r - $g) > 15) {
+                            $skinPixelCount++;
                             
-                            // Check if this is skin tone (rough heuristic)
-                            if ($r > 95 && $g > 40 && $b > 20 && $r > $g && $r > $b && abs($r - $g) > 15) {
-                                // Calculate local smoothness
-                                $neighbors = [
-                                    imagecolorat($imageResource, $x-1, $y),
-                                    imagecolorat($imageResource, $x+1, $y),
-                                    imagecolorat($imageResource, $x, $y-1),
-                                    imagecolorat($imageResource, $x, $y+1)
-                                ];
-                                
-                                $localDiff = 0;
-                                foreach ($neighbors as $neighbor) {
-                                    $nr = ($neighbor >> 16) & 0xFF;
-                                    $ng = ($neighbor >> 8) & 0xFF;
-                                    $nb = $neighbor & 0xFF;
-                                    $localDiff += abs($r - $nr) + abs($g - $ng) + abs($b - $nb);
+                            // Calculate local variance (smoothness)
+                            $variance = 0;
+                            for ($dx = -1; $dx <= 1; $dx++) {
+                                for ($dy = -1; $dy <= 1; $dy++) {
+                                    if ($dx == 0 && $dy == 0) continue;
+                                    $nx = min(max($x + $dx, 0), $width - 1);
+                                    $ny = min(max($y + $dy, 0), $height - 1);
+                                    $nrgb = imagecolorat($imageResource, $nx, $ny);
+                                    $nr = ($nrgb >> 16) & 0xFF;
+                                    $variance += abs($r - $nr);
                                 }
-                                $skinSmoothness += $localDiff / 4;
-                                $skinSamples++;
                             }
+                            $skinSmoothnessValue += $variance / 8;
                         }
                     }
                     
-                    if ($skinSamples > 50) { // Enough skin samples detected
-                        $avgSkinSmoothness = $skinSmoothness / $skinSamples;
+                    if ($skinPixelCount > 100) {
+                        $avgSkinSmoothness = $skinSmoothnessValue / $skinPixelCount;
                         
-                        // AI skin is TOO smooth (< 8)
-                        // Real skin has texture, pores (> 12)
-                        if ($avgSkinSmoothness < 6) {
-                            $skinSmoothnessPenalty = 15; // Very smooth = Strong AI indicator
-                            $pixelAnalysisDetails['skin_texture'] = 'too_smooth_ai';
-                        } else if ($avgSkinSmoothness < 10) {
-                            $skinSmoothnessPenalty = 8; // Somewhat smooth = Moderate AI indicator
-                            $pixelAnalysisDetails['skin_texture'] = 'somewhat_smooth';
-                        } else {
+                        // STRICTER: AI skin is TOO smooth (low variance)
+                        if ($avgSkinSmoothness > 25) { // LOWERED from 30 - more strict
+                            $realIndicators++;
                             $pixelAnalysisDetails['skin_texture'] = 'natural';
+                        } else {
+                            $aiIndicators++;
+                            $skinSmoothnessPenalty = 10;
+                            $pixelAnalysisDetails['skin_texture'] = 'too_smooth_ai';
                         }
                         
                         $pixelAnalysisDetails['skin_smoothness_value'] = round($avgSkinSmoothness, 2);
@@ -408,10 +530,19 @@ class ImageAnalysisController extends Controller
                     
                     Log::info('Pixel Analysis Result:', $pixelAnalysisDetails);
                     
+                    // Save metadata-only score before combining with pixel
+                    $metadataOnlyScore = $confidence;
+                    
                     // Combine metadata confidence with pixel analysis
-                    // ULTRA AGGRESSIVE: 30% metadata, 70% pixel (maximum pixel priority)
-                    // Almost entirely rely on pixel analysis to catch all AI types
-                    $confidence = round(($confidence * 0.3) + ($pixelAnalysisScore * 0.7));
+                    // OPTIMIZED: Increased metadata weight for better accuracy
+                    if ($hasCamera || $hasDateTime) {
+                        // Has metadata: 70% metadata, 30% pixel
+                        // Prioritize reliable EXIF data over visual analysis
+                        $confidence = round(($confidence * 0.7) + ($pixelAnalysisScore * 0.3));
+                    } else {
+                        // No metadata: 50% metadata, 50% pixel (balanced)
+                        $confidence = round(($confidence * 0.5) + ($pixelAnalysisScore * 0.5));
+                    }
                     
                 }
             } catch (\Exception $e) {
@@ -419,6 +550,76 @@ class ImageAnalysisController extends Controller
                 // Keep original confidence if pixel analysis fails
             }
             
+            // SIGHTENGINE AI DETECTION
+            Log::info('🔍 CHECKING SIGHTENGINE INTEGRATION...');
+            
+            $sightengineScore = null;
+            $sightengineEnabled = env('SIGHTENGINE_ENABLED', false);
+            $sightengineUser = env('SIGHTENGINE_API_USER');
+            $sightengineSecret = env('SIGHTENGINE_API_SECRET');
+            
+            Log::info('Sightengine Config:', [
+                'enabled' => $sightengineEnabled,
+                'has_user' => !empty($sightengineUser),
+                'has_secret' => !empty($sightengineSecret),
+                'user_value' => $sightengineUser
+            ]);
+            
+            if ($sightengineEnabled) {
+                try {
+                    Log::info('✅ Sightengine ENABLED - Starting AI detection...');
+                    
+                    if ($sightengineUser && $sightengineSecret) {
+                        // Initialize Sightengine client
+                        $client = new \Sightengine\SightengineClient($sightengineUser, $sightengineSecret);
+                        
+                        // Check for AI-generated content and text (watermarks)
+                        $output = $client->check(['genai', 'text'])->set_file($filePath);
+                        
+                        Log::info('Sightengine API Response:', (array)$output);
+                        
+                        if (isset($output->status) && $output->status === 'success') {
+                            // AI-generated detection score (0-1, higher = more likely AI)
+                            $aiProbability = $output->type->ai_generated ?? 0;
+                            
+                            // Convert to our scale (0-100, lower = more likely AI)
+                            $sightengineScore = round((1 - $aiProbability) * 100);
+                            
+                            // Check for watermarks/text
+                            $hasWatermark = false;
+                            if (isset($output->text) && isset($output->text->has_text) && $output->text->has_text) {
+                                $hasWatermark = true;
+                                Log::info('Watermark/Text detected in image');
+                            }
+                            
+                            Log::info('Sightengine Analysis:', [
+                                'ai_probability' => $aiProbability,
+                                'sightengine_score' => $sightengineScore,
+                                'has_watermark' => $hasWatermark
+                            ]);
+                            
+                            // Combine Sightengine with existing confidence
+                            // Weight: 40% Sightengine, 60% internal (metadata + pixel)
+                            $beforeSightengine = $confidence;
+                            $confidence = round(($confidence * 0.6) + ($sightengineScore * 0.4));
+                            
+                            Log::info('Combined confidence after Sightengine:', [
+                                'before' => $beforeSightengine,
+                                'sightengine' => $sightengineScore,
+                                'after' => $confidence
+                            ]);
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Sightengine API failed:', [
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+            
+            // CRITICAL FIX: Initialize $scores AFTER pixel+metadata combination
+            // This ensures $scores[0] contains the FINAL combined score
+            $scores = [$confidence]; // Internal analysis score (metadata + pixel combined)
             
             // ENHANCED TRIPLE VOTING SYSTEM: GOOGLE CLOUD VISION FOR ALL IMAGES
             // Google Vision is now called for ALL images to maximize accuracy
@@ -426,7 +627,6 @@ class ImageAnalysisController extends Controller
             $googleVisionScore = null;
             $awsScore = null;
             $votingMethod = 'internal_only';
-            $scores = [$confidence]; // Initialize with internal score
             
             // ALWAYS use Google Vision if enabled (not just gray area)
             Log::info('Using Google Vision for enhanced accuracy...');
@@ -452,7 +652,7 @@ class ImageAnalysisController extends Controller
             // }
             
             // Calculate final score using voting
-            $scores = [$confidence]; // Internal analysis score
+            // $scores already initialized above with combined metadata+pixel score
             if ($googleVisionScore !== null) $scores[] = $googleVisionScore;
             if ($awsScore !== null) $scores[] = $awsScore;
             
@@ -470,7 +670,8 @@ class ImageAnalysisController extends Controller
             }
             
             // Update isAI based on final score
-            $isAI = $confidence < 50;
+            // BALANCED: Threshold 45% (reduced from 50%)
+            $isAI = $confidence < 45;
             
             Log::info('Voting System Result:', [
                 'internalScore' => $scores[0],
@@ -481,6 +682,24 @@ class ImageAnalysisController extends Controller
             ]);
             
             
+            // CRITICAL DEBUG: Check $exifData state before building response
+            Log::info('🔬 EXIF DATA STATE BEFORE RESPONSE:', [
+                'exifData_is_array' => is_array($exifData),
+                'exifData_is_false' => $exifData === false,
+                'exifData_empty' => empty($exifData),
+                'Make_value' => $exifData['Make'] ?? 'NOT SET',
+                'Model_value' => $exifData['Model'] ?? 'NOT SET'
+            ]);
+            
+            // Log metadata being sent to frontend
+            Log::info('📤 SENDING RESPONSE TO FRONTEND:', [
+                'confidence' => $confidence,
+                'isAI' => $isAI,
+                'metadata_make' => $exifData['Make'] ?? 'NULL',
+                'metadata_model' => $exifData['Model'] ?? 'NULL',
+                'metadata_datetime' => $exifData['DateTime'] ?? $exifData['DateTimeOriginal'] ?? 'NULL',
+                'metadata_software' => $exifData['Software'] ?? 'NULL'
+            ]);
             
             return response()->json([
                 'success' => true,
@@ -491,9 +710,26 @@ class ImageAnalysisController extends Controller
                 'method' => $votingMethod,
                 'usedGoogleVision' => $usedGoogleVision,
                 'scores' => [
-                    'internal' => $scores[0] ?? $confidence,
+                    'internal' => $scores[0] ?? $confidence,  // Final combined score
+                    'metadata' => $metadataOnlyScore ?? 80,   // Metadata-only score (before pixel combination)
+                    'pixel' => $pixelAnalysisScore ?? 50,     // Pixel-only score
+                    'sightengine' => $sightengineScore,       // Sightengine AI detection score
                     'googleVision' => $googleVisionScore,
                     'aws' => $awsScore
+                ],
+                'metadata' => [
+                    'make' => $exifData['Make'] ?? null,
+                    'model' => $exifData['Model'] ?? null,
+                    'datetime' => $exifData['DateTime'] ?? $exifData['DateTimeOriginal'] ?? null,
+                    'software' => $exifData['Software'] ?? null,
+                    'width' => $exifData['COMPUTED']['Width'] ?? $exifData['ExifImageWidth'] ?? null,
+                    'height' => $exifData['COMPUTED']['Height'] ?? $exifData['ExifImageLength'] ?? null,
+                    'filesize' => $exifData['FileSize'] ?? null,
+                    'iso' => $exifData['ISOSpeedRatings'] ?? null,
+                    'aperture' => $exifData['FNumber'] ?? $exifData['ApertureValue'] ?? null,
+                    'exposure' => $exifData['ExposureTime'] ?? null,
+                    'gps_latitude' => isset($exifData['GPSLatitude']) ? $this->formatGPS($exifData['GPSLatitude'], $exifData['GPSLatitudeRef'] ?? 'N') : null,
+                    'gps_longitude' => isset($exifData['GPSLongitude']) ? $this->formatGPS($exifData['GPSLongitude'], $exifData['GPSLongitudeRef'] ?? 'E') : null
                 ]
             ]);
             
@@ -713,5 +949,46 @@ class ImageAnalysisController extends Controller
         } catch (AwsException $e) {
             throw new \Exception('AWS Rekognition Error: ' . $e->getMessage());
         }
+    }
+    
+    /**
+     * Format GPS coordinates from EXIF format to decimal degrees
+     */
+    private function formatGPS($coordinate, $ref)
+    {
+        if (!is_array($coordinate) || count($coordinate) < 3) {
+            return null;
+        }
+        
+        // Convert degrees/minutes/seconds to decimal
+        $degrees = $this->evalFraction($coordinate[0]);
+        $minutes = $this->evalFraction($coordinate[1]);
+        $seconds = $this->evalFraction($coordinate[2]);
+        
+        $decimal = $degrees + ($minutes / 60) + ($seconds / 3600);
+        
+        // Apply direction (N/S for latitude, E/W for longitude)
+        if ($ref == 'S' || $ref == 'W') {
+            $decimal *= -1;
+        }
+        
+        return round($decimal, 6);
+    }
+    
+    /**
+     * Evaluate fraction string (e.g., "123/1" to 123)
+     */
+    private function evalFraction($fraction)
+    {
+        if (is_numeric($fraction)) {
+            return $fraction;
+        }
+        
+        $parts = explode('/', $fraction);
+        if (count($parts) == 2 && $parts[1] != 0) {
+            return $parts[0] / $parts[1];
+        }
+        
+        return 0;
     }
 }

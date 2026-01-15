@@ -1,0 +1,16 @@
+/* OVERRIDE: Remove old background and show aurora */
+.visual-section {
+    background: none !important;
+}
+
+.visual-section::before {
+    display: none !important;
+}
+
+/* Hide old neon elements */
+.neon-circle,
+.neon-line,
+.gradient-blob,
+.glass-visual {
+    display: none !important;
+}

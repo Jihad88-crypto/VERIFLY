@@ -7,6 +7,7 @@
 
   {{-- CSS dari folder public/Privacy --}}
   <link rel="stylesheet" href="{{ asset('Privacy/style.css') }}">
+  <link rel="stylesheet" href="{{ asset('Privacy/rainbow-gradient.css') }}">
 </head>
 
 <body>
@@ -63,11 +64,6 @@
 
     <!-- Right Section: Visuals -->
     <section class="visual-section">
-      <div class="glass-visual"></div>
-      <div class="gradient-blob blob-1"></div>
-      <div class="gradient-blob blob-2"></div>
-      <div class="gradient-blob blob-3"></div>
-
       <!-- AI Floating Element -->
       <div class="ai-fab">
         <div class="ai-icon"></div>
@@ -106,8 +102,8 @@
     };
 
     document.addEventListener('DOMContentLoaded', () => {
-        const savedLang = localStorage.getItem('privasi_lang') || 'en';
-        const t = translations[savedLang] || translations['en'];
+        // FORCE ENGLISH - Disabled multi-language for competition
+        const t = translations['en'];
 
         if(document.getElementById('login-title')) document.getElementById('login-title').innerText = t.t1;
         if(document.getElementById('login-title-sub')) document.getElementById('login-title-sub').innerText = t.t2;

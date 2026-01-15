@@ -1,0 +1,43 @@
+/* ============================================ */
+/* REGISTER PAGE SPECIFIC SPACING FIX */
+/* ============================================ */
+
+/* Add more top padding to prevent header collision */
+.login-section {
+    padding-top: 40px !important;
+}
+
+/* Reduce hero text size and margin for register page */
+.hero-text h1 {
+    font-size: 2.5rem !important;
+    margin-bottom: 16px !important;
+    margin-top: 20px !important;
+}
+
+.hero-text {
+    margin-bottom: 24px !important;
+}
+
+/* Reduce form gap to fit all elements */
+.login-form {
+    gap: 16px !important;
+}
+
+/* Reduce form group gap */
+.form-group {
+    gap: 8px !important;
+}
+
+/* Ensure content wrapper has proper spacing */
+.content-wrapper {
+    padding: 20px 0 !important;
+}
+
+/* Ensure button and footer are visible */
+.btn-primary {
+    margin-top: 8px !important;
+}
+
+.form-footer {
+    margin-top: 16px !important;
+}

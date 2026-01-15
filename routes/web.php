@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ImageAnalysisController;
 use App\Http\Controllers\VideoAnalysisController;
+use App\Http\Controllers\AudioAnalysisController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -68,3 +69,4 @@ Route::get('/api/test', [ImageAnalysisController::class, 'test'])->name('api.tes
 // AI Detection API - Outside auth middleware for testing (no CSRF)
 Route::post('/api/detect-ai', [ImageAnalysisController::class, 'detectAI'])->name('api.detect-ai');
 Route::post('/api/video/detect-ai', [VideoAnalysisController::class, 'detectAI'])->name('api.video.detect-ai');
+Route::post('/api/audio/detect-ai', [AudioAnalysisController::class, 'detectAI'])->name('api.audio.detect-ai');

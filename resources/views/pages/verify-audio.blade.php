@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Audio Authenticity | Privacy Platform</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <style>
@@ -441,40 +442,66 @@
 
         function triggerUpload() { fileInput.click(); }
 
-        function handleFile(files) {
+        async function handleFile(files) {
             if (files.length > 0) {
-                const isFake = Math.random() < 0.6; 
-                startScanning(isFake);
+                const file = files[0];
+                
+                // Show scanning state
+                uploadZone.style.display = 'none';
+                scanState.style.display = 'block';
+                
+                // Animate scanning
+                const statusText = document.getElementById('scanStatus');
+                const detailText = document.getElementById('scanDetail');
+                
+                const steps = [
+                    { t: 0, s: "Uploading Audio...", d: "Preparing audio file..." },
+                    { t: 800, s: "Scanning Frequencies...", d: "Analyzing 20Hz - 20kHz range..." },
+                    { t: 1800, s: "Matching Voiceprint...", d: "Comparing against known AI models..." },
+                    { t: 2800, s: "Checking Noise Floor...", d: "Looking for digital silence artifacts..." }
+                ];
+                
+                steps.forEach(step => {
+                    setTimeout(() => {
+                        statusText.innerText = step.s;
+                        detailText.innerText = step.d;
+                    }, step.t);
+                });
+                
+                try {
+                    // Call backend API
+                    const formData = new FormData();
+                    formData.append('audio', file);
+                    
+                    const response = await fetch('/api/audio/detect-ai', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                        },
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Show result
+                        setTimeout(() => {
+                            showResult(data);
+                        }, 3500);
+                    } else {
+                        alert('Analysis failed: ' + (data.error || 'Unknown error'));
+                        resetPage();
+                    }
+                    
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Analysis failed: ' + error.message);
+                    resetPage();
+                }
             }
         }
 
-        function startScanning(isFake) {
-            uploadZone.style.display = 'none';
-            scanState.style.display = 'block';
-
-            const statusText = document.getElementById('scanStatus');
-            const detailText = document.getElementById('scanDetail');
-
-            const steps = [
-                { t: 800, s: "Scanning Frequencies...", d: "Analyzing 20Hz - 20kHz range..." },
-                { t: 1800, s: "Matching Voiceprint...", d: "Comparing against known AI models (ElevenLabs, Coqui)..." },
-                { t: 2800, s: "Checking Noise Floor...", d: "Looking for digital silence artifacts..." },
-                { t: 3500, s: "Finalizing...", d: "Generating spectrogram report..." }
-            ];
-
-            steps.forEach(step => {
-                setTimeout(() => {
-                    statusText.innerText = step.s;
-                    detailText.innerText = step.d;
-                }, step.t);
-            });
-
-            setTimeout(() => {
-                showResult(isFake);
-            }, 4200);
-        }
-
-        function showResult(isFake) {
+        function showResult(data) {
             scanState.style.display = 'none';
             resultCard.style.display = 'block';
             
@@ -486,34 +513,53 @@
             const lang = localStorage.getItem('privasi_lang') || 'en';
             const t = translations[lang] || translations['en'];
             
+            // Determine if AI or Real based on score (threshold: 40%)
+            const isAI = data.isAI || data.score < 40;
+            const confidence = data.confidence || data.score;
+            
             setTimeout(() => {
                 document.querySelectorAll('.ai-bar').forEach(bar => {
                     bar.style.width = bar.getAttribute('data-width');
                 });
             }, 100);
 
-            if (isFake) {
-                // Fake
+            if (isAI) {
+                // AI/Synthetic Audio
                 header.className = 'verdict-header'; 
                 icon.innerText = '🤖';
                 title.innerText = t.res.fake;
-                score.innerText = 'Confidence: 98.1%';
+                score.innerText = `Confidence: ${(100 - confidence).toFixed(1)}%`;
                 
-                // Add analysis logic/text update here if needed
                 document.querySelectorAll('.analysis-item').forEach(item => item.style.opacity = '1');
+                
+                // Update anomalies based on method
+                const anomaliesBox = document.querySelector('.anomalies-box');
+                let anomaliesHTML = '<div class="anom-title">🚩 Anomalies Found</div><ul class="anom-list">';
+                
+                if (data.method === 'hybrid') {
+                    anomaliesHTML += '<li>AI voice signature detected by deep learning model.</li>';
+                    anomaliesHTML += '<li>Metadata analysis confirms synthetic origin.</li>';
+                } else {
+                    anomaliesHTML += '<li>Suspicious metadata patterns detected.</li>';
+                    anomaliesHTML += '<li>Codec characteristics match AI generators.</li>';
+                }
+                
+                anomaliesHTML += '</ul>';
+                anomaliesBox.innerHTML = anomaliesHTML;
+                
             } else {
-                // Real
+                // Real/Authentic Audio
                 header.className = 'verdict-header safe'; 
                 icon.innerText = '✅';
                 title.innerText = t.res.real;
-                score.innerText = 'Confidence: 99.4%';
+                score.innerText = `Confidence: ${confidence.toFixed(1)}%`;
                 
                 document.querySelectorAll('.analysis-item').forEach(item => item.style.opacity = '0.5');
                 document.querySelector('.anomalies-box').innerHTML = `
                     <div class="anom-title" style="color: #059669;">✔️ ${t.res.safe}</div>
                     <ul class="anom-list">
-                        <li style="color: #047857;">Noise Floor: Reliable analog background noise detected.</li>
-                        <li style="color: #047857;">Breathing: Natural irregularity in breath patterns.</li>
+                        <li style="color: #047857;">Natural voice characteristics detected.</li>
+                        <li style="color: #047857;">Metadata indicates authentic recording.</li>
                     </ul>
                 `;
                 document.querySelector('.anomalies-box').style.background = '#ecfdf5';

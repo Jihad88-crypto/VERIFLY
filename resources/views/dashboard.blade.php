@@ -27,61 +27,122 @@
             position: relative;
         }
 
-        /* DEEP SPACE GRADIENT BACKGROUND */
+
+        /* PREMIUM MODERN DASHBOARD BACKGROUND */
         body {
-            background: linear-gradient(135deg, 
-                #000814 0%,      /* Deep black */
-                #001d3d 25%,     /* Dark blue */
-                #003566 50%,     /* Medium blue */
-                #001d3d 75%,     /* Dark blue */
-                #000814 100%     /* Deep black */
-            );
+            background: #0a0a0f;
             color: var(--text-main);
             position: relative;
             overflow-x: hidden;
         }
         
-        /* Blue Nebula Glow - Right Side */
+        /* Base gradient mesh */
         body::before {
             content: '';
             position: fixed;
-            right: -15%;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 800px;
-            height: 800px;
-            background: radial-gradient(circle, 
-                rgba(59, 130, 246, 0.15) 0%, 
-                rgba(37, 99, 235, 0.08) 30%,
-                transparent 70%
-            );
-            opacity: 0.6;
+            inset: 0;
+            background: 
+                radial-gradient(ellipse at 20% 30%, rgba(138, 43, 226, 0.3) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(147, 51, 234, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(153, 69, 255, 0.18) 0%, transparent 60%);
             z-index: 0;
             pointer-events: none;
-            filter: brightness(1.2) saturate(1.3);
         }
         
-        /* Starfield Effect - Left Side */
+        /* Subtle grid pattern */
         body::after {
             content: '';
             position: fixed;
-            left: -10%;
-            top: 20%;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, 
-                rgba(147, 197, 253, 0.1) 0%, 
-                transparent 50%
-            );
-            opacity: 0.4;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(153, 69, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(153, 69, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
             z-index: 0;
             pointer-events: none;
-            animation: pulse 8s ease-in-out infinite;
+            opacity: 0.5;
+        }
+        
+        /* Animated purple orb - top left */
+        .orb-1 {
+            position: fixed;
+            top: 10%;
+            left: 15%;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(138, 43, 226, 0.5) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: 0;
+            pointer-events: none;
+            animation: floatOrb1 20s ease-in-out infinite;
+        }
+        
+        /* Animated purple orb - bottom right */
+        .orb-2 {
+            position: fixed;
+            bottom: 15%;
+            right: 10%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(147, 51, 234, 0.45) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(90px);
+            z-index: 0;
+            pointer-events: none;
+            animation: floatOrb2 25s ease-in-out infinite;
+        }
+        
+        /* Accent glow - center */
+        .accent-glow {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(153, 69, 255, 0.2) 0%, transparent 60%);
+            border-radius: 50%;
+            filter: blur(100px);
+            z-index: 0;
+            pointer-events: none;
+            animation: pulse 15s ease-in-out infinite;
+        }
+        
+        @keyframes floatOrb1 {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(30px, -40px); }
+        }
+        
+        @keyframes floatOrb2 {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(-40px, 30px); }
         }
         
         @keyframes pulse {
-            0%, 100% { opacity: 0.4; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(1.1); }
+            0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+        }
+        
+        /* Dark vignette for depth */
+        .vignette {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.6) 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        /* Hide old decorative elements */
+        .purple-glow-left,
+        .purple-glow-right,
+        .stars,
+        .shape-left,
+        .shape-right,
+        .chess-pink,
+        .chess-clear,
+        .chess-blue {
+            display: none !important;
         }
 
         /* REMOVED OLD CANVAS STYLES */
@@ -220,7 +281,11 @@
 </head>
 <body>
     
-
+    <!-- Premium Background Effects -->
+    <div class="orb-1"></div>
+    <div class="orb-2"></div>
+    <div class="accent-glow"></div>
+    <div class="vignette"></div>
 
     <!-- Background is now handled via CSS Body -->
 

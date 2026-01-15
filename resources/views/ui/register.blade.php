@@ -7,6 +7,8 @@
 
   {{-- CSS dari folder public/Privacy --}}
   <link rel="stylesheet" href="{{ asset('Privacy/style.css') }}">
+  <link rel="stylesheet" href="{{ asset('Privacy/rainbow-gradient.css') }}">
+  <link rel="stylesheet" href="{{ asset('Privacy/register-fix.css') }}">
 </head>
 
 <body>
